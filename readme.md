@@ -1,3 +1,3 @@
 ### Folder Structure
 
-![Backend starter folder structure](/public/images/image.png)
+![Backend starter folder structure](/public/images/folder_structure.png)
