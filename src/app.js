@@ -22,4 +22,10 @@ app.use(express.static("public"))
 // to perform CRUD operation on user's browser cookie.
 app.use(cookieParser())
 
+// import routers because of segrigated code.
+import userRouter from './routes/user.routes.js'
+
+// router decleration
+app.use("/api/v1/users", userRouter)
+
 export { app }
