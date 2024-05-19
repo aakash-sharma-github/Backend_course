@@ -240,6 +240,13 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 const updateUserAvatar = asyncHandler(async (req, res) => {
     const updatedAvatarPath = req.file?.path
 
+    // TODO: delete old avatar image.
+    const oldAvatar = req.user?.avatar
+
+    if (oldAvatar) {
+        await cloudinaryFileDelete(oldAvatar)
+    }
+
     if (!updatedAvatarPath) {
         throw new ApiErrors(400, "Avatar is missing.")
     }
@@ -256,6 +263,8 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         }
     }, { new: true }).select("-password")
 
+
+
     return res.status(200).json(new ApiResponse(200, user, "Avatar updated!"))
 })
 
@@ -264,6 +273,12 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
     if (!updatedCoverImagePath) {
         throw new ApiErrors(400, "Cover image is missing.")
+    }
+    // TODO: delete old cover image.
+    const oldcoverImage = req.user?.coverImage
+
+    if (oldcoverImage) {
+        await cloudinaryFileDelete(oldcoverImage)
     }
 
     const coverImage = await cloudinaryFileUpload(updatedCoverImagePath)
@@ -278,9 +293,82 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         }
     }, { new: true }).select("-password")
 
+
     return res.status(200).json(new ApiResponse(200, user, "Cover image updated!"))
 })
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+    const { username } = req.params
+
+    if (!username?.trim()) {
+        throw new ApiErrors(400, "Username does not exists.")
+    }
+
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase()
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribed"
+            }
+        },
+        {
+            $addFields: {
+                subscriberCount: {
+                    $size: "$subscribers"
+                },
+                subscribedToCount: {
+                    $size: "$subscribed"
+                },
+                isSubscribed: {
+                    $cond: {
+                        if: {
+                            $in: [req.user?._id, "$subscribers.subscriber"]
+                        },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                username: 1,
+                fullname: 1,
+                email: 1,
+                createdAt: 1,
+                subscriberCount: 1,
+                subscribedToCount: 1,
+                isSubscribed: 1
+            }
+        }
+    ])
+
+    console.log("Channel Aggerigation: ", channel)
+
+    if (!channel?.length) {
+        throw new ApiErrors(400, "Channel does not exists.")
+    }
+
+    return res.status(200)
+    .json(
+        new ApiResponse(200, channel[0], "User channel Fetched.")
+    )
+})
 
 export {
     registerUser,
@@ -291,5 +379,6 @@ export {
     getCurrentUser,
     updateAccountDetails,
     updateUserAvatar,
-    updateUserCoverImage
+    updateUserCoverImage,
+    getUserChannelProfile
 }
