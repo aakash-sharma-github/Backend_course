@@ -1,7 +1,8 @@
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiErrors } from '../utils/ApiErrors.js'
 import { User } from '../models/user.models.js'
-import { cloudinaryFileUpload } from '../utils/cloudinary.js'
+import { cloudinaryFileUpload, cloudinaryFileDelete } from '../utils/cloudinary.js'
+import { extractPublicId } from 'cloudinary-build-url'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
@@ -159,7 +160,8 @@ const logoutUser = asyncHandler(async (req, res) => {
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-    const refreshTokenFromCookie = res.cookies.refreshToken || req.body.refreshToken
+    const refreshTokenFromCookie = req.cookies.refreshToken || req.body.refreshToken
+
 
     if (!refreshTokenFromCookie) {
         throw new ApiErrors(401, "Unauthorized request.")
@@ -168,7 +170,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     try {
         const decodeToken = jwt.verify(refreshTokenFromCookie, process.env.REFRESH_TOKEN_SECRET)
 
-        const user = User.findById(decodeToken?._id)
+        const user = await User.findById(decodeToken?._id)
 
         if (!user) {
             throw new ApiErrors(401, "Invalid refresh token.")
@@ -186,9 +188,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             sameSite: "None"
         }
 
+
         return res.status(200)
-            .Cookie("accessToken", accessToken, cookieOptions)
-            .Cookie("refreshToken", refreshToken, cookieOptions)
+            .cookie("accessToken", accessToken, cookieOptions)
+            .cookie("refreshToken", refreshToken, cookieOptions)
             .json(new ApiResponse(200, { accessToken, refreshToken }, "Token is Refreshed."))
     } catch (error) {
         throw new ApiErrors(401, error?.message || "Invalid refresh token"
@@ -199,13 +202,24 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const changePassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword, confirmPassword } = req.body
 
-    if (!(newPassword === confirmPassword)) {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+        throw new ApiErrors(400, "Missing required fields.");
+    }
+
+    if (newPassword !== confirmPassword) {
         throw new ApiErrors(401, "Password does not match.")
     }
 
+    const body = req.body
+
+    console.log(`body: ${body}`)
+
     const user = await User.findById(req.body?._id)
 
+    console.log("user:", user)
+
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+    console.log("ispassword:", isPasswordCorrect)
 
     if (!isPasswordCorrect) {
         throw new ApiErrors(401, "Invalid password.")
@@ -218,13 +232,13 @@ const changePassword = asyncHandler(async (req, res) => {
 })
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-    return res.status(200).json(200, req.user, "User fetched successfully!")
+    return res.status(200).json(new ApiResponse(200, req.user, "User fetched successfully!"))
 })
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
     const { fullname, email } = req.body
 
-    if (!(fullname || email)) {
+    if (!fullname || !email) {
         throw new ApiErrors(400, "All fields are required.")
     }
 
@@ -241,18 +255,20 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 const updateUserAvatar = asyncHandler(async (req, res) => {
     const updatedAvatarPath = req.file?.path
 
-    // TODO: delete old avatar image.
+    // TODO: delete old avatar image. still not done.
     const oldAvatar = req.user?.avatar
 
-    if (oldAvatar) {
-        await cloudinaryFileDelete(oldAvatar)
-    }
+    const publicId = extractPublicId(oldAvatar)
+
+    const deleteFile = await cloudinaryFileDelete(publicId)
+    console.log(`delete: ${deleteFile}`)
 
     if (!updatedAvatarPath) {
         throw new ApiErrors(400, "Avatar is missing.")
     }
 
     const avatar = await cloudinaryFileUpload(updatedAvatarPath)
+    // console.log(`avatar ${avatar}`)
 
     if (!avatar.url) {
         throw new ApiErrors(401, "Error while uploading avatar.")
@@ -275,8 +291,13 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     if (!updatedCoverImagePath) {
         throw new ApiErrors(400, "Cover image is missing.")
     }
-    // TODO: delete old cover image.
+    // TODO: delete old cover image. still not done.
     const oldcoverImage = req.user?.coverImage
+
+    const publicId = extractPublicId(oldcoverImage)
+
+    const deleteFile = await cloudinaryFileDelete(publicId)
+    console.log(`delete: ${deleteFile}`)
 
     if (oldcoverImage) {
         await cloudinaryFileDelete(oldcoverImage)
@@ -301,6 +322,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 const getUserChannelProfile = asyncHandler(async (req, res) => {
     const { username } = req.params
 
+    console.log(`username: ${req.params}`)
     if (!username?.trim()) {
         throw new ApiErrors(400, "Username does not exists.")
     }
@@ -386,23 +408,23 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                 as: "watchHistory",
                 pipeline: [{
                     $lookup: {
-                        from: "Users",
+                        from: "users",
                         localField: "owner",
                         foreignField: "_id",
                         as: "owner",
-                        pipeline: {
+                        pipeline: [{
                             $project: {
                                 fullname: 1,
                                 username: 1,
                                 avatar: 1
                             }
-                        }
+                        }]
                     }
                 },
                 {
                     $addFields: {
                         owner: {
-                            $first: "owner"
+                            $first: "$owner"
                         }
                     }
                 }]
@@ -415,6 +437,11 @@ const getWatchHistory = asyncHandler(async (req, res) => {
             new ApiResponse(200, user[0].watchHistory, "Watch history fetched.")
         )
 })
+
+// TODO: avatar: delete old avatar.
+// TODO: cover image: delete old cover image.
+// TODO: change password
+// TODO: get user channel profile.
 
 
 
