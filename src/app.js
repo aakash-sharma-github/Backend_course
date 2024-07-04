@@ -5,13 +5,19 @@ import cors from 'cors'
 const app = express()
 
 // cors only allows specific domains to interact with our backend
-app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true
-}))
+const corsOptions = {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+    
+
+}
+app.use(cors(corsOptions))
 
 // accept json files upto 20kb.
 app.use(express.json({ limit: '20kb' }))
+
+// Handle preflight requests
+app.options('*', cors());
 
 // search input url encoder and modify urls limit upto 20kb.
 app.use(express.urlencoded({ extended: true, limit: "20kb" }))

@@ -138,8 +138,8 @@ const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set: {
-                refreshToken: undefined
+            $unset: {
+                refreshToken: 1
             }
         },
         {
@@ -180,7 +180,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             throw new ApiErrors(401, "RefreshToken is used or expired.")
         }
 
-        const { accessToken, refreshToken } = generateAccessAndRefreshToken(user._id)
+        const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
         const cookieOptions = {
             httpOnly: true,
@@ -214,7 +214,7 @@ const changePassword = asyncHandler(async (req, res) => {
 
     console.log(`body: ${body}`)
 
-    const user = await User.findById(req.body?._id)
+    const user = await User.findById(req.user?._id)
 
     console.log("user:", user)
 
@@ -440,7 +440,6 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
 // TODO: avatar: delete old avatar.
 // TODO: cover image: delete old cover image.
-// TODO: change password
 // TODO: get user channel profile.
 
 
